@@ -8,8 +8,6 @@
 #include <sys/wait.h>
 
 
-/* command.c (New Helper Function) */
-
 // Delimiters for command arguments (already defined in your file)
 #define QUASH_TOK_DELIM " \t\r\n\a" 
 #define MAX_PIPES 10 // Define a constant limit
@@ -105,6 +103,25 @@ char *read_line(void) {
     return line;
 }
 
+// Helper to trim leading and trailing whitespace
+char *trim_whitespace(char *str) {
+    char *end;
+
+    // Trim leading space
+    while(isspace((unsigned char)*str)) str++;
+
+    if(*str == 0) // All spaces
+        return str;
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while(end > str && isspace((unsigned char)*end)) end--;
+
+    // Write new null terminator
+    *(end + 1) = 0;
+
+    return str;
+}
 /* command.c (Snippet for parse_command) */
 
 Job *parse_command(char *line) {
@@ -181,14 +198,19 @@ Job *parse_command(char *line) {
     
     // --- 4. Parse Each Process/Segment (Redirection and Arguments) ---
     for (int i = 0; i < num_pipes; i++) {
-        parse_process_segment(pipe_segments[i], &job->processes[i]);
-        free(pipe_segments[i]); // Free the temporary segment copy
+        // TRIMMING THE SEGMENT IS CRUCIAL
+        char *trimmed_segment = trim_whitespace(pipe_segments[i]); 
+        parse_process_segment(trimmed_segment, &job->processes[i]);
+        
+        // NOTE: The previous code freed pipe_segments[i] which was strdup'd. 
+        // Ensure you free the *original pointer* to prevent memory leaks.
+        free(pipe_segments[i]);
     }
     
     return job; // Return the fully parsed job structure
 }
 // Conceptual helper function to tokenize arguments
-#define QUASH_TOK_DELIM " \t\r\n\a" // Delimiters for command arguments
+
 
 char **split_line_to_args(char *line) {
     int bufsize = 64;

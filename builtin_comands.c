@@ -45,35 +45,43 @@ int quash_cd(char **args) {
 int quash_echo(char **args) {
     for (int i = 1; args[i] != NULL; i++) {
         char *to_print = args[i];
-
+        
         // Check for variable expansion: $VAR
         if (to_print[0] == '$') {
+            // This is the variable expansion logic you implemented in the last step
             char *var_name_start = to_print + 1;
             char *var_name_end = var_name_start;
             
-            // 1. Find the end of the variable name (e.g., stops at / in $HOME/Desktop)
             while (*var_name_end != '\0' && (isalnum(*var_name_end) || *var_name_end == '_')) {
                 var_name_end++;
             }
             
-            // 2. Temporarily null-terminate the variable name
             char original_char = *var_name_end;
             *var_name_end = '\0';
             
-            // 3. Get the expanded value
             char *value = getenv(var_name_start);
             
             if (value != NULL) {
                 printf("%s", value);
             }
             
-            // 4. Restore the string and print the remainder (e.g., /Desktop)
             *var_name_end = original_char;
             printf("%s", var_name_end);
             
         } else {
-            // Print regular argument
-            printf("%s", to_print);
+            // --- Quoting Fix ---
+            // If the argument starts and ends with a single or double quote, strip them.
+            char start_char = to_print[0];
+            size_t len = strlen(to_print);
+
+            if (len > 1 && (start_char == '\'' || start_char == '\"') && to_print[len - 1] == start_char) {
+                // If quoted, print the substring between the quotes
+                // +1 skips the opening quote, len - 2 is the new length
+                printf("%.*s", (int)(len - 2), to_print + 1);
+            } else {
+                // Not quoted or improperly quoted, print as is
+                printf("%s", to_print);
+            }
         }
 
         // Print space if it's not the last argument
