@@ -254,7 +254,7 @@ void wait_for_job(Job *job) {
     } while (!WIFEXITED(status) && !WIFSIGNALED(status));
 
     // Cleanup the job structure after it finishes
-    // free_job(job); 
+    free_job(job); 
 }
 
 /* job_control.c */
