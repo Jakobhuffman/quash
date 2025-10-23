@@ -30,7 +30,7 @@ typedef struct Job {
 } Job;
 
 // Global list to track background jobs
-Job *job_list;
+Job **job_list; // Changed to array of Job pointers
 int max_job_id;
 
 // --- Function Prototypes ---

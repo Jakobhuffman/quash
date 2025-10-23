@@ -136,10 +136,10 @@ int quash_jobs(char **args) {
     // This loop logic is highly dependent on how job_list is implemented (array vs. list).
     // Assuming 'max_job_id' is the current highest ID and the array/list is indexed.
     for (int i = 0; i < max_job_id; i++) { 
-        // Assuming job_list[i].job_id != 0 means the slot is occupied by an active job.
-        if (job_list[i].job_id != 0) {
+        // Check if the slot is occupied by an active job (pointer is not NULL)
+        if (job_list[i] != NULL) {
             // REQUIRED FORMAT: "[JOBID] PID COMMAND"
-            printf("[%d] %d %s\n", job_list[i].job_id, (int)job_list[i].pgid, job_list[i].command_line);
+            printf("[%d] %d %s\n", job_list[i]->job_id, (int)job_list[i]->pgid, job_list[i]->command_line);
         }
     }
     return 0;

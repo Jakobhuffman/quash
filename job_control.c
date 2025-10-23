@@ -15,6 +15,19 @@
 
 #define MAX_JOBS 1024 // Define a limit for the job list size (if using a fixed array)
 
+void initialize_job_control(void) {
+    // 1. Allocate memory for the global job list array
+    job_list = (Job **)calloc(MAX_JOBS, sizeof(Job *)); // Allocate for pointers to Job structs
+    if (job_list == NULL) {
+        perror("quash: Failed to initialize job list");
+        exit(EXIT_FAILURE);
+    }
+    
+    // 2. Initialize the max job ID counter
+    max_job_id = 0;
+}
+
+
 // Helper to find the next available job ID
 int get_next_job_id() {
     // Logic to find the next job ID (max_job_id + 1, and wrap around/reuse if needed)
@@ -27,45 +40,57 @@ int get_next_job_id() {
 // Forward declarations for pipeline stages and external execution
 int launch_process(Process *p, pid_t pgid, int fdin, int fdout, bool is_background);
 int launch_job(Job *job); // Handles the initial fork for the pipeline
+void wait_for_job(Job *job); // Wait for a foreground job
 
 /**
  * Main execution handler: checks for built-in vs. external.
  */
 int execute_job(Job *job) {
-    // Assume job->processes[0].argv[0] is the command name
     char *command = job->processes[0].argv[0];
-    char **args = job->processes[0].argv; // Shorthand for arguments
+    char **args = job->processes[0].argv; 
+    
+    if (command == NULL) {
+        // Handle job cleanup here
+        return 1;
+    }
 
-    // 1. Check if it's a built-in command
-    if (command == NULL) return 1;
-
-    if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0) {
-        // You'll need an implementation of quash_exit, which likely just calls exit(0);
-        exit(0); 
-    } 
-    if (strcmp(command, "cd") == 0) {
-        quash_cd(args); 
-        return 1;
-    }
-    if (strcmp(command, "echo") == 0) {
-        quash_echo(args);
-        return 1;
-    }
-    if (strcmp(command, "export") == 0) {
-        quash_export(args);
-        return 1;
-    }
-    if (strcmp(command, "pwd") == 0) {
-        quash_pwd(args);
-        return 1;
-    }
-    if (strcmp(command, "jobs") == 0) {
-        quash_jobs(args);
-        return 1;
-    }
-    if (strcmp(command, "kill") == 0) {
-        quash_kill(args);
-        return 1;
+    // 1. Check if it's a built-in command AND not part of a pipe
+    if (job->num_processes == 1) { // <-- CRITICAL CHECK
+        if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0) {
+            free_job(job); // Cleanup before exiting
+            exit(0);
+        }
+        else if (strcmp(command, "cd") == 0) {
+            quash_cd(args);
+            free_job(job); // Cleanup
+            return 1;
+        }
+        // ... (Repeat for echo, export, pwd, jobs, kill) ...
+        else if (strcmp(command, "echo") == 0) {
+            quash_echo(args);
+            free_job(job); // Cleanup
+            return 1;
+        }
+        else if (strcmp(command, "export") == 0) {
+            quash_export(args);
+            free_job(job);
+            return 1;
+        }
+        else if (strcmp(command, "pwd") == 0) {
+            quash_pwd(args);
+            free_job(job);
+            return 1;
+        }
+        else if (strcmp(command, "jobs") == 0) {
+            quash_jobs(args);
+            free_job(job);
+            return 1;
+        }
+        else if (strcmp(command, "kill") == 0) {
+            quash_kill(args);
+            free_job(job);
+            return 1;
+        }
     }
     // NOTE: Built-ins should not be run in a subshell, so they should return immediately.
 
@@ -239,12 +264,19 @@ void wait_for_job(Job *job) {
  */
 void track_job(Job *job) {
     job->job_id = get_next_job_id();
-    // Add job to job_list array/linked list (Need your specific job_list logic here)
-    // job_list[job->job_id] = *job; 
+    if (job->job_id <= MAX_JOBS) {
+        // Store the pointer to the job, not a copy of the struct
+        // The job ID is 1-based, array is 0-based
+        job_list[job->job_id - 1] = job;
 
-    // Print the required startup message
-    printf("Background job started: [%d] %d %s &\n", 
-           job->job_id, (int)job->pgid, job->command_line);
+        // Print the required startup message
+        printf("Background job started: [%d] %d %s &\n",
+               job->job_id, (int)job->pgid, job->command_line);
+    } else {
+        fprintf(stderr, "quash: too many jobs\n");
+        // We are not tracking this job, so it should be freed.
+        free_job(job);
+    }
 }
 
 /**
@@ -254,26 +286,69 @@ void check_jobs_status() {
     pid_t wpid;
     int status;
     
-    // Loop through the active job list (depends on your job_list structure)
-    // For simplicity, let's assume we loop MAX_JOBS times or through the list.
-    
     // Use WNOHANG: returns 0 if no child has exited, or the PID of the exited child.
     while ((wpid = waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
-        
-        // Find the job associated with this wpid (by checking job->processes[] PIDs or PGID)
-        Job *completed_job = NULL; 
-        
-        // --- Loop to find the job associated with wpid ---
-        
-        if (completed_job != NULL) {
-            if (WIFEXITED(status) || WIFSIGNALED(status)) {
-                // Job truly finished
-                printf("Completed: [%d] %d %s\n", 
-                       completed_job->job_id, (int)wpid, completed_job->command_line);
-                // Remove the job from the job_list (cleanup)
-                // free_job(completed_job); 
+        // Find the job associated with this wpid by checking its PGID
+        for (int i = 0; i < max_job_id; i++) {
+            if (job_list[i] != NULL && job_list[i]->pgid == wpid) {
+                // Check if the process group has terminated
+                // A simple check is to see if the leader of the group (wpid) has exited/been signaled
+                if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                    printf("Completed: [%d] %d %s\n",
+                           job_list[i]->job_id, (int)wpid, job_list[i]->command_line);
+                    
+                    // Free the job resources and remove it from the list
+                    free_job(job_list[i]);
+                    job_list[i] = NULL;
+                }
+                // You could add logic here for WIFSTOPPED (Ctrl+Z) if you implement that feature
+
+                break; // Found the job, no need to search further
             }
-            // Add logic for WIFSTOPPED (Ctrl+Z) or WIFCONTINUED if handling those signals.
         }
     }
+}
+
+ // Add this prototype to quash.h
+void free_job(Job *job);
+
+/* job_control.c */
+void free_job(Job *job) {
+    if (job == NULL) return;
+
+    // 1. Free the original command line string
+    if (job->command_line) {
+        free(job->command_line);
+    }
+    
+    // 2. Loop through all processes in the job
+    for (int i = 0; i < job->num_processes; i++) {
+        Process *p = &job->processes[i];
+        
+        // 3. Free redirection strings
+        if (p->input_file) {
+            free(p->input_file);
+        }
+        if (p->output_file) {
+            free(p->output_file);
+        }
+
+        // 4. Free the argument list (p->argv) AND the argument strings inside it.
+        // NOTE: If you used strdup for arguments in parse_process_segment, 
+        // you MUST free each argument string before freeing the array.
+        if (p->argv) {
+            for (int j = 0; p->argv[j] != NULL; j++) {
+                free(p->argv[j]); // Free each strdup'd argument string
+            }
+            free(p->argv); // Free the array itself
+        }
+    }
+    
+    // 5. Free the array of processes
+    if (job->processes) {
+        free(job->processes);
+    }
+    
+    // 6. Free the job structure
+    free(job);
 }
