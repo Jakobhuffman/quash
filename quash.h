@@ -49,7 +49,10 @@ int execute_builtin(char **args);
 // Built-ins
 int quash_cd(char **args);
 int quash_echo(char **args);
-// ... others ...
+int quash_pwd(char **args);    
+int quash_export(char **args); 
+int quash_jobs(char **args);  
+int quash_kill(char **args);
 
 // Job Control
 void initialize_job_control(void);
