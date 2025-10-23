@@ -48,28 +48,32 @@ void wait_for_job(Job *job); // Wait for a foreground job
  */
 int execute_job(Job *job) {
     char *command = job->processes[0].argv[0];
-    char **args = job->processes[0].argv; 
+    char **args = job->processes[0].argv;
+    Process *p = &job->processes[0]; 
     
     if (command == NULL) {
         // Handle job cleanup here
         return 1;
     }
+    bool is_simple_builtin = (job->num_processes == 1 &&
+                              p->input_file == NULL &&
+                              p->output_file == NULL);
 
-    // 1. Check if it's a built-in command AND not part of a pipe
-    if (job->num_processes == 1) { // <-- CRITICAL CHECK
+    // 1. Check if it's a built-in command AND no redirection/pipes
+    if (is_simple_builtin) { 
         if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0) {
-            free_job(job); // Cleanup before exiting
+            free_job(job);
             exit(0);
         }
         else if (strcmp(command, "cd") == 0) {
             quash_cd(args);
-            free_job(job); // Cleanup
+            free_job(job);
             return 1;
         }
-        // ... (Repeat for echo, export, pwd, jobs, kill) ...
+        // ... ALL other built-ins (echo, export, pwd, jobs, kill) must be in this block ...
         else if (strcmp(command, "echo") == 0) {
             quash_echo(args);
-            free_job(job); // Cleanup
+            free_job(job);
             return 1;
         }
         else if (strcmp(command, "export") == 0) {

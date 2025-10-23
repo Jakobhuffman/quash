@@ -7,6 +7,7 @@
 #include <unistd.h> // for get_current_dir_name
 #include <unistd.h>
 #include <errno.h>
+#include <ctype.h>
 
 
 int quash_cd(char **args) {
@@ -47,13 +48,29 @@ int quash_echo(char **args) {
 
         // Check for variable expansion: $VAR
         if (to_print[0] == '$') {
-            char *var_name = to_print + 1; // Skip the '$'
-            char *value = getenv(var_name);
+            char *var_name_start = to_print + 1;
+            char *var_name_end = var_name_start;
+            
+            // 1. Find the end of the variable name (e.g., stops at / in $HOME/Desktop)
+            while (*var_name_end != '\0' && (isalnum(*var_name_end) || *var_name_end == '_')) {
+                var_name_end++;
+            }
+            
+            // 2. Temporarily null-terminate the variable name
+            char original_char = *var_name_end;
+            *var_name_end = '\0';
+            
+            // 3. Get the expanded value
+            char *value = getenv(var_name_start);
+            
             if (value != NULL) {
                 printf("%s", value);
-            } else {
-                // Bash/Shells print nothing if var is unset: echo $UNSET_VAR
             }
+            
+            // 4. Restore the string and print the remainder (e.g., /Desktop)
+            *var_name_end = original_char;
+            printf("%s", var_name_end);
+            
         } else {
             // Print regular argument
             printf("%s", to_print);
