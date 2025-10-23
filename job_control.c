@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <errno.h>
+#include <fcntl.h> // For O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC, O_APPEND
 
 // Global variables defined in quash.h but implemented here (or in quash.c)
 // Job *job_list; 
@@ -33,19 +34,40 @@ int launch_job(Job *job); // Handles the initial fork for the pipeline
 int execute_job(Job *job) {
     // Assume job->processes[0].argv[0] is the command name
     char *command = job->processes[0].argv[0];
-    
-    // 1. Check if it's a built-in command (e.g., 'cd', 'exit')
-    // NOTE: Built-ins should be checked BEFORE the pipeline/redirection logic.
+    char **args = job->processes[0].argv; // Shorthand for arguments
+
+    // 1. Check if it's a built-in command
+    if (command == NULL) return 1;
+
     if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0) {
-        // Execute the built-in function
-        // quash_exit(job->processes[0].argv); 
-        return 0; // Signal main loop to exit
+        // You'll need an implementation of quash_exit, which likely just calls exit(0);
+        exit(0); 
     } 
-    // ... check other built-ins (cd, echo, export, pwd, jobs, kill) ...
     if (strcmp(command, "cd") == 0) {
-        // execute_builtin(job->processes[0].argv); 
-        return 1; // Signal success (stay in loop)
+        quash_cd(args); 
+        return 1;
     }
+    if (strcmp(command, "echo") == 0) {
+        quash_echo(args);
+        return 1;
+    }
+    if (strcmp(command, "export") == 0) {
+        quash_export(args);
+        return 1;
+    }
+    if (strcmp(command, "pwd") == 0) {
+        quash_pwd(args);
+        return 1;
+    }
+    if (strcmp(command, "jobs") == 0) {
+        quash_jobs(args);
+        return 1;
+    }
+    if (strcmp(command, "kill") == 0) {
+        quash_kill(args);
+        return 1;
+    }
+    // NOTE: Built-ins should not be run in a subshell, so they should return immediately.
 
     // 2. External Command (or pipeline)
     return launch_job(job);
@@ -141,32 +163,34 @@ int launch_process(Process *p, pid_t pgid, int fdin, int fdout, bool is_backgrou
         }
         // NOTE: All pipe FDs must be closed after dup2 in the child process.
 
-        // 2. Handle File I/O Redirection (file_in, file_out, file_append)
-        // (This code depends on your Process struct parsing)
-        // NOTE: The original code referenced p->input_file / p->output_file / p->append_output,
-        // but those fields are not present in your Process struct; avoid referencing them here.
-        // If your Process struct provides different field names for redirection (for example
-        // p->infile, p->outfile, p->append), implement the open/dup2 logic using those names.
-        //
-        // Example (uncomment and adjust field names if your struct provides them):
-        // if (p->infile) {
-        //     int fd = open(p->infile, O_RDONLY);
-        //     if (fd < 0) { perror("quash: open input"); exit(1); }
-        //     dup2(fd, STDIN_FILENO);
-        //     close(fd);
-        // }
-        // if (p->outfile) {
-        //     int flags = O_WRONLY | O_CREAT;
-        //     if (p->append) {
-        //         flags |= O_APPEND; // >>
-        //     } else {
-        //         flags |= O_TRUNC;  // >
-        //     }
-        //     int fd = open(p->outfile, flags, 0666);
-        //     if (fd < 0) { perror("quash: open output"); exit(1); }
-        //     dup2(fd, STDOUT_FILENO);
-        //     close(fd);
-        // }
+        // 2. Handle File I/O Redirection (using the fields added to the Process struct)
+        if (p->input_file) {
+            int fd = open(p->input_file, O_RDONLY);
+            if (fd < 0) { 
+                perror("quash: open input file"); 
+                exit(1); 
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        }
+        
+        if (p->output_file) {
+            int flags = O_WRONLY | O_CREAT;
+            if (p->append_output) {
+                flags |= O_APPEND; // >>
+            } else {
+                flags |= O_TRUNC;  // >
+            }
+            
+            // 0666 is the permission for the new file
+            int fd = open(p->output_file, flags, 0666); 
+            if (fd < 0) { 
+                perror("quash: open output file"); 
+                exit(1); 
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
 
         // 3. Execute the command
         if (execvp(p->argv[0], p->argv) == -1) {

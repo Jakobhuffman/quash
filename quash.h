@@ -9,8 +9,13 @@
 // A single process within a job (e.g., in a pipe)
 typedef struct Process {
     pid_t pid;
-    char **argv; // Command and arguments
-    // maybe status/exit code
+    char **argv;          // Command and arguments
+    
+    // ADD THESE FIELDS for I/O Redirection
+    char *input_file;     // Filename for < redirection
+    char *output_file;    // Filename for > or >> redirection
+    bool append_output;   // True if redirection is >>
+    // ... other process info
 } Process;
 
 // A job can be a single command or a pipeline
