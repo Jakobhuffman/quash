@@ -55,5 +55,6 @@ int quash_echo(char **args);
 void initialize_job_control(void);
 void track_job(struct Job *job);
 void check_jobs_status(void);
+void free_job(Job *job);
 
 #endif

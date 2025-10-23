@@ -69,12 +69,16 @@ int quash_echo(char **args) {
 }
 
 int quash_pwd(char **args) {
-    char *cwd = get_current_dir_name(); // Allocates memory
-    if (cwd != NULL) {
+    // 1. Use a fixed size buffer for the current working directory
+    //    (Path length usually limited to 4096 bytes on modern systems)
+    char cwd[4096]; 
+    
+    // 2. Use getcwd to retrieve the path into the buffer
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
         printf("%s\n", cwd);
-        free(cwd); // Free the memory allocated by get_current_dir_name
+        // NOTE: No free(cwd) needed here because 'cwd' is a stack variable.
     } else {
-        perror("quash: pwd");
+        perror("quash: pwd error retrieving path");
         return -1;
     }
     return 0;

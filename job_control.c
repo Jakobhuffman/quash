@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <fcntl.h> // For O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC, O_APPEND
+#include <string.h>
 
 // Global variables defined in quash.h but implemented here (or in quash.c)
 // Job *job_list; 
