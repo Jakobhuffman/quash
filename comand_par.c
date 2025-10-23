@@ -6,7 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
-
+#include <ctype.h>
 
 // Delimiters for command arguments (already defined in your file)
 #define QUASH_TOK_DELIM " \t\r\n\a" 
