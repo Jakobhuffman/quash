@@ -1,5 +1,4 @@
 /* Parsing comands in the Inteface */
-/* command.c */
 #include "quash.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,38 +7,29 @@
 #include <sys/wait.h>
 #include <ctype.h>
 
-// Delimiters for command arguments (already defined in your file)
 #define QUASH_TOK_DELIM " \t\r\n\a" 
-#define MAX_PIPES 10 // Define a constant limit
+#define MAX_PIPES 10 // Maximum number of pipes supported
 
-/**
- * Parses a single command segment (one side of a pipe),
- * extracting I/O redirection and tokenizing arguments.
- */
 static void parse_process_segment(char *segment, Process *p) {
-    // 1. Initialize process redirection fields
     p->input_file = NULL;
     p->output_file = NULL;
     p->append_output = false;
     
-    // We build a new argument list that excludes the redirection tokens
     int bufsize = 64;
     int position = 0;
-    // Note: The tokens in temp_tokens will be pointers to newly allocated memory (strdup)
+
     char **temp_tokens = (char **)malloc(bufsize * sizeof(char*));
     if (!temp_tokens) { perror("malloc"); exit(EXIT_FAILURE); }
 
     char *token;
     char *saveptr;
     
-    // We use strtok_r to safely tokenize and allow nested parsing if needed.
     token = strtok_r(segment, QUASH_TOK_DELIM, &saveptr);
     // 0=none, 1=input pending, 2=output pending
     int redirection_pending = 0; 
 
     while (token != NULL) {
         if (redirection_pending) {
-            // The previous token was a redirection symbol, this token is the filename
             if (redirection_pending == 1) { 
                 p->input_file = strdup(token);
             } else { // redirection_pending == 2
@@ -107,6 +97,9 @@ char *read_line(void) {
 char *trim_whitespace(char *str) {
     char *end;
 
+    if (str == NULL || *str == 0)
+        return str;
+
     // Trim leading space
     while(isspace((unsigned char)*str)) str++;
 
@@ -122,7 +115,7 @@ char *trim_whitespace(char *str) {
 
     return str;
 }
-/* command.c (Snippet for parse_command) */
+
 
 Job *parse_command(char *line) {
     if (line == NULL || *line == '\0') {
@@ -172,10 +165,9 @@ Job *parse_command(char *line) {
             fprintf(stderr, "quash: too many pipes\n");
             // NOTE: Add cleanup logic here
             free(pipe_input);
-            // ... cleanup job struct and return NULL ...
             return NULL; 
         }
-        // Store a copy of the segment string for later parsing
+        // Store a copy of the string for later parsing
         pipe_segments[num_pipes++] = strdup(token); 
         token = strtok(NULL, "|");
     }
@@ -192,13 +184,11 @@ Job *parse_command(char *line) {
     job->processes = (Process *)calloc(num_pipes, sizeof(Process));
     if (!job->processes) { 
         perror("calloc"); 
-        // ... cleanup job struct and return NULL ...
         return NULL;
     }
     
     // --- 4. Parse Each Process/Segment (Redirection and Arguments) ---
     for (int i = 0; i < num_pipes; i++) {
-        // TRIMMING THE SEGMENT IS CRUCIAL
         char *trimmed_segment = trim_whitespace(pipe_segments[i]); 
         parse_process_segment(trimmed_segment, &job->processes[i]);
         
