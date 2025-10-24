@@ -144,7 +144,9 @@ int quash_export(char **args) {
 //     int job_id;
 //     pid_t pgid; 
 //     char *command_line;
-//  
+//     Process *processes;
+//     int num_processes;
+//     bool is_background;
 // } Job;
 
 // jobs

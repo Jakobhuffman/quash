@@ -19,7 +19,10 @@ static void parse_process_segment(char *segment, Process *p) {
     int position = 0;
 
     char **temp_tokens = (char **)malloc(bufsize * sizeof(char*));
-    if (!temp_tokens) { perror("malloc"); exit(EXIT_FAILURE); }
+    if (!temp_tokens) { 
+        perror("malloc"); 
+        exit(EXIT_FAILURE); 
+    }
 
     char *token;
     char *saveptr;
@@ -45,13 +48,15 @@ static void parse_process_segment(char *segment, Process *p) {
             p->append_output = false;
             redirection_pending = 2; // Output file pending
         } else {
-            // Regular argument
             temp_tokens[position++] = strdup(token);
 
             if (position >= bufsize) {
                 bufsize += 64;
                 temp_tokens = (char**)realloc(temp_tokens, bufsize * sizeof(char*));
-                if (!temp_tokens) { perror("realloc"); exit(EXIT_FAILURE); }
+                if (!temp_tokens) { 
+                    perror("realloc"); 
+                    exit(EXIT_FAILURE); 
+                }
             }
         }
         token = strtok_r(NULL, QUASH_TOK_DELIM, &saveptr);
@@ -66,22 +71,19 @@ static void parse_process_segment(char *segment, Process *p) {
  */
 char *read_line(void) {
     char *line = NULL;
-    size_t bufsize = 0; // getline manages the buffer size
+    size_t bufsize = 0; // manages the buffer size
     ssize_t chars_read;
-
-    // Getline will allocate memory for 'line'.
     chars_read = getline(&line, &bufsize, stdin);
 
     if (chars_read == -1) {
-        // EOF (Ctrl+D) or error
+      
         if (feof(stdin)) {
-            // End of File (EOF)
             free(line);
             return NULL;
         } else {
             perror("quash: getline error");
             free(line);
-            exit(EXIT_FAILURE); // Fatal error
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -93,24 +95,27 @@ char *read_line(void) {
     return line;
 }
 
-// Helper to trim leading and trailing whitespace
+// trim leading and trailing whitespace
 char *trim_whitespace(char *str) {
     char *end;
 
-    if (str == NULL || *str == 0)
+    if (str == NULL || *str == 0){
         return str;
+    }
 
     // Trim leading space
-    while(isspace((unsigned char)*str)) str++;
+    while(isspace((unsigned char)*str)) {
+        str++;
+    }
 
-    if(*str == 0) // All spaces
+    if(*str == 0) {// All spaces
         return str;
+    }
 
-    // Trim trailing space
     end = str + strlen(str) - 1;
-    while(end > str && isspace((unsigned char)*end)) end--;
-
-    // Write new null terminator
+    while(end > str && isspace((unsigned char)*end)) {
+        end--;
+    }
     *(end + 1) = 0;
 
     return str;
@@ -121,28 +126,30 @@ Job *parse_command(char *line) {
     if (line == NULL || *line == '\0') {
         return NULL; // Empty input
     }
-    
-    // Create a copy of the line to tokenize and store in the Job struct
+
     char *line_copy = strdup(line);
-    if (!line_copy) { perror("strdup"); return NULL; }
+    if (!line_copy) { 
+        perror("strdup"); return NULL; 
+    }
 
     Job *job = (Job *)malloc(sizeof(Job));
-    if (!job) { perror("malloc"); free(line_copy); return NULL; }
+    if (!job) { 
+        perror("malloc"); free(line_copy); 
+        return NULL; 
+    }
     memset(job, 0, sizeof(Job));
     job->command_line = line_copy;
 
-    // --- 1. Handle Comments ---
     char *comment_pos = strchr(line_copy, '#');
     if (comment_pos) {
-        *comment_pos = '\0'; // Terminate the string at the comment
+        *comment_pos = '\0'; // terminate the string at the comment
     }
     
-    // --- 2. Check for Background Job (&) ---
+    
     size_t len = strlen(line_copy);
     if (len > 0 && line_copy[len - 1] == '&') {
         job->is_background = true;
         line_copy[len - 1] = '\0'; // Remove '&'
-        // Trim any preceding whitespace left after removing '&'
         while (len > 0 && (line_copy[len - 2] == ' ' || line_copy[len - 2] == '\t')) {
             line_copy[len - 2] = '\0';
             len--;
@@ -151,11 +158,8 @@ Job *parse_command(char *line) {
         job->is_background = false;
     }
     
-    // --- 3. Split by Pipe (|) ---
-    char *pipe_segments[MAX_PIPES]; // Temporary array for segments
+    char *pipe_segments[MAX_PIPES]; 
     int num_pipes = 0;
-    
-    // We use a copy of the string to tokenize for pipes
     char *pipe_input = strdup(line_copy);
     char *token;
 
@@ -163,18 +167,15 @@ Job *parse_command(char *line) {
     while (token != NULL) {
         if (num_pipes >= MAX_PIPES) {
             fprintf(stderr, "quash: too many pipes\n");
-            // NOTE: Add cleanup logic here
             free(pipe_input);
             return NULL; 
         }
-        // Store a copy of the string for later parsing
         pipe_segments[num_pipes++] = strdup(token); 
         token = strtok(NULL, "|");
     }
-    free(pipe_input); // Free the string used for pipe tokenizing
+    free(pipe_input);
 
     if (num_pipes == 0) {
-        // Empty command after background check and comment removal
         free(job->command_line);
         free(job);
         return NULL;
@@ -187,20 +188,14 @@ Job *parse_command(char *line) {
         return NULL;
     }
     
-    // --- 4. Parse Each Process/Segment (Redirection and Arguments) ---
     for (int i = 0; i < num_pipes; i++) {
         char *trimmed_segment = trim_whitespace(pipe_segments[i]); 
         parse_process_segment(trimmed_segment, &job->processes[i]);
-        
-        // NOTE: The previous code freed pipe_segments[i] which was strdup'd. 
-        // Ensure you free the *original pointer* to prevent memory leaks.
         free(pipe_segments[i]);
     }
     
-    return job; // Return the fully parsed job structure
+    return job;
 }
-// Conceptual helper function to tokenize arguments
-
 
 char **split_line_to_args(char *line) {
     int bufsize = 64;
@@ -213,16 +208,12 @@ char **split_line_to_args(char *line) {
         exit(EXIT_FAILURE);
     }
 
-    // Use strtok to split the command string by spaces/tabs
-    // NOTE: This simple strtok will break if you have quoted arguments!
     token = strtok(line, QUASH_TOK_DELIM);
     while (token != NULL) {
-        // You should handle variable expansion ($VAR) here or later
         tokens[position] = token; 
         position++;
 
-        if (position >= bufsize) {
-            // Reallocate memory if needed
+        if (position >= bufsize) {  
             bufsize += 64;
             tokens = (char**)realloc(tokens, bufsize * sizeof(char*));
             if (!tokens) {
@@ -233,6 +224,6 @@ char **split_line_to_args(char *line) {
 
         token = strtok(NULL, QUASH_TOK_DELIM);
     }
-    tokens[position] = NULL; // NULL-terminate the argument list
+    tokens[position] = NULL; 
     return tokens;
 }
