@@ -6,7 +6,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <errno.h>
-#include <fcntl.h> /
+#include <fcntl.h> 
 #include <string.h>
 
 int max_job_id; 
